@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Backend/">
+    <Project Path="src/Backend/OrbitDesk.Api/OrbitDesk.Api.csproj" />
+  </Folder>
+</Solution>
