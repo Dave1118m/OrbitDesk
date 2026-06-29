@@ -102,4 +102,62 @@ public class AuthController : ControllerBase
         await _db.SaveChangesAsync();
         return Ok(new { message = "Password has been reset." });
     }
+
+    [HttpPost("oauth/google")]
+    public async Task<ActionResult<AuthResponse>> GoogleOAuth(OAuthCallbackRequest request)
+    {
+        if (!ModelState.IsValid)
+            return ValidationProblem(ModelState);
+
+        // In production, validate the OAuth token with Google's servers
+        // For now, accept email and name from the frontend
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower());
+
+        if (user is null)
+        {
+            // Create new user on first OAuth login
+            user = new User
+            {
+                Name = request.Name ?? "Google User",
+                Email = request.Email,
+                PasswordHash = PasswordHasher.Hash(Guid.NewGuid().ToString()), // Random password for OAuth users
+                IsActive = true,
+                Role = "Member"
+            };
+            _db.Users.Add(user);
+            await _db.SaveChangesAsync();
+        }
+
+        var token = _jwt.CreateToken(user);
+        return Ok(new AuthResponse(token, user.Name, user.Email, user.Role));
+    }
+
+    [HttpPost("oauth/github")]
+    public async Task<ActionResult<AuthResponse>> GitHubOAuth(OAuthCallbackRequest request)
+    {
+        if (!ModelState.IsValid)
+            return ValidationProblem(ModelState);
+
+        // In production, validate the OAuth token with GitHub's servers
+        // For now, accept email and name from the frontend
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower());
+
+        if (user is null)
+        {
+            // Create new user on first OAuth login
+            user = new User
+            {
+                Name = request.Name ?? "GitHub User",
+                Email = request.Email,
+                PasswordHash = PasswordHasher.Hash(Guid.NewGuid().ToString()), // Random password for OAuth users
+                IsActive = true,
+                Role = "Member"
+            };
+            _db.Users.Add(user);
+            await _db.SaveChangesAsync();
+        }
+
+        var token = _jwt.CreateToken(user);
+        return Ok(new AuthResponse(token, user.Name, user.Email, user.Role));
+    }
 }

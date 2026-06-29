@@ -21,6 +21,8 @@ import {
   resetPasswordRequest,
   setAuthToken,
   verifyResetPassword,
+  oauthGoogle,
+  oauthGitHub,
   removeOrganizationMember,
   removeWorkspaceMember,
   updateOrganization,
@@ -394,6 +396,48 @@ function App() {
     }
   }
 
+  const handleGoogleOAuth = async () => {
+    try {
+      resetAuthMessages()
+      // In production, use Google SDK to get the actual token
+      // For now, use a placeholder token - in real implementation you'd use @react-oauth/google
+      const googleUser = {
+        email: 'user@gmail.com',
+        name: 'Google User',
+        idToken: 'placeholder-google-token'
+      }
+      
+      const auth = await oauthGoogle(googleUser)
+      saveSession(auth)
+      setSuccess('Google login successful.')
+      await refreshAll()
+      setActiveTab('overview')
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  const handleGitHubOAuth = async () => {
+    try {
+      resetAuthMessages()
+      // In production, use GitHub SDK to get the actual token
+      // For now, use a placeholder token
+      const githubUser = {
+        email: 'user@github.com',
+        name: 'GitHub User',
+        idToken: 'placeholder-github-token'
+      }
+      
+      const auth = await oauthGitHub(githubUser)
+      saveSession(auth)
+      setSuccess('GitHub login successful.')
+      await refreshAll()
+      setActiveTab('overview')
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
   const resetUserForm = () => {
     setEditingUserId(null)
     setUserForm(defaultUserForm)
@@ -754,8 +798,8 @@ function App() {
               </button>
               <div className="auth-divider"><span>or continue with</span></div>
               <div className="social-buttons">
-                <button type="button" className="social-button google">Continue with Google</button>
-                <button type="button" className="social-button github">Continue with GitHub</button>
+                <button type="button" className="social-button google" onClick={handleGoogleOAuth}>Continue with Google</button>
+                <button type="button" className="social-button github" onClick={handleGitHubOAuth}>Continue with GitHub</button>
               </div>
               <div className="auth-footer">
                 New here? <button type="button" className="auth-link" onClick={() => switchAuthView('register')}>Register</button>
@@ -812,8 +856,8 @@ function App() {
               </button>
               <div className="auth-divider"><span>or continue with</span></div>
               <div className="social-buttons">
-                <button type="button" className="social-button google">Continue with Google</button>
-                <button type="button" className="social-button github">Continue with GitHub</button>
+                <button type="button" className="social-button google" onClick={handleGoogleOAuth}>Continue with Google</button>
+                <button type="button" className="social-button github" onClick={handleGitHubOAuth}>Continue with GitHub</button>
               </div>
               <div className="auth-footer">
                 Already have an account? <button type="button" className="auth-link" onClick={() => switchAuthView('login')}>Login</button>

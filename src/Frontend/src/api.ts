@@ -1,4 +1,4 @@
-const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5000/api'
+const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5298/api'
 let authToken: string | null = null
 
 export function setAuthToken(token: string | null) {
@@ -169,6 +169,12 @@ type VerifyResetRequest = {
   password: string
 }
 
+type OAuthCallbackRequest = {
+  email: string
+  name?: string
+  idToken: string
+}
+
 type AuthResponse = {
   token: string
   name: string
@@ -214,6 +220,7 @@ export type {
   RegisterRequest,
   ResetRequest,
   VerifyResetRequest,
+  OAuthCallbackRequest,
   AuthResponse,
   MessageResponse,
 }
@@ -331,6 +338,20 @@ export function resetPasswordRequest(request: ResetRequest) {
 
 export function verifyResetPassword(request: VerifyResetRequest) {
   return fetchJson<MessageResponse>('/Auth/reset-verify', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+}
+
+export function oauthGoogle(request: OAuthCallbackRequest) {
+  return fetchJson<AuthResponse>('/Auth/oauth/google', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+}
+
+export function oauthGitHub(request: OAuthCallbackRequest) {
+  return fetchJson<AuthResponse>('/Auth/oauth/github', {
     method: 'POST',
     body: JSON.stringify(request),
   })

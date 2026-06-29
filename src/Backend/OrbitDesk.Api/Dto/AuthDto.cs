@@ -45,4 +45,16 @@ public class VerifyResetRequest
     public string Password { get; set; } = string.Empty;
 }
 
+public class OAuthCallbackRequest
+{
+    [Required]
+    [EmailAddress]
+    public string Email { get; set; } = string.Empty;
+
+    public string? Name { get; set; }
+
+    [Required]
+    public string IdToken { get; set; } = string.Empty;
+}
+
 public record AuthResponse(string Token, string Name, string Email, string Role);
