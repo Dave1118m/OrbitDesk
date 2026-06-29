@@ -16,6 +16,11 @@ import {
   getUsers,
   getWorkspaceMembers,
   getWorkspaces,
+  loginUser,
+  registerUser,
+  resetPasswordRequest,
+  setAuthToken,
+  verifyResetPassword,
   removeOrganizationMember,
   removeWorkspaceMember,
   updateOrganization,
@@ -28,6 +33,7 @@ import {
   type CreateUserRequest,
   type CreateWorkspaceMemberRequest,
   type CreateWorkspaceRequest,
+  type AuthResponse,
   type Organization,
   type OrganizationMember,
   type Project,
@@ -42,6 +48,32 @@ import {
 import './App.css'
 
 type Tab = 'overview' | 'users' | 'organizations' | 'workspaces' | 'projects' | 'organizationMembers' | 'workspaceMembers'
+
+type AuthView = 'login' | 'register' | 'resetRequest' | 'resetVerify'
+
+type LoginForm = {
+  email: string
+  password: string
+  rememberMe: boolean
+}
+
+type RegisterForm = {
+  fullName: string
+  email: string
+  password: string
+  confirmPassword: string
+}
+
+type ResetRequestForm = {
+  email: string
+}
+
+type ResetVerifyForm = {
+  email: string
+  token: string
+  password: string
+  confirmPassword: string
+}
 
 type UserForm = CreateUserRequest & { password: string }
 
@@ -102,6 +134,13 @@ const defaultWorkspaceMemberForm: WorkspaceMemberForm = {
 }
 
 function App() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [authView, setAuthView] = useState<AuthView>('login')
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [currentUser, setCurrentUser] = useState<AuthResponse | null>(null)
+
+  const toggleSidebar = () => setSidebarCollapsed((s) => !s)
+
   const [activeTab, setActiveTab] = useState<Tab>('overview')
   const [users, setUsers] = useState<User[]>([])
   const [organizations, setOrganizations] = useState<Organization[]>([])
@@ -112,6 +151,12 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const [loginForm, setLoginForm] = useState<LoginForm>({ email: '', password: '', rememberMe: false })
+  const [registerForm, setRegisterForm] = useState<RegisterForm>({ fullName: '', email: '', password: '', confirmPassword: '' })
+  const [resetRequestForm, setResetRequestForm] = useState<ResetRequestForm>({ email: '' })
+  const [resetVerifyForm, setResetVerifyForm] = useState<ResetVerifyForm>({ email: '', token: '', password: '', confirmPassword: '' })
+  const [passwordStrength, setPasswordStrength] = useState('')
 
   const [userForm, setUserForm] = useState<UserForm>(defaultUserForm)
   const [organizationForm, setOrganizationForm] = useState<OrganizationForm>(defaultOrganizationForm)
@@ -148,7 +193,18 @@ function App() {
   }
 
   useEffect(() => {
-    refreshAll().catch((err) => setError((err as Error).message))
+    const storedToken = localStorage.getItem('orbitdesk_token')
+    const storedUser = localStorage.getItem('orbitdesk_user')
+
+    if (storedToken) {
+      setAuthToken(storedToken)
+      setIsAuthenticated(true)
+      if (storedUser) {
+        setCurrentUser(JSON.parse(storedUser) as AuthResponse)
+      }
+
+      refreshAll().catch((err) => setError((err as Error).message))
+    }
   }, [])
 
   const dashboardSummary = useMemo(
@@ -166,6 +222,176 @@ function App() {
   const resetMessages = () => {
     setError(null)
     setSuccess(null)
+  }
+
+  const resetAuthMessages = () => {
+    setError(null)
+    setSuccess(null)
+  }
+
+  const switchAuthView = (view: AuthView) => {
+    resetAuthMessages()
+    setPasswordStrength('')
+    setAuthView(view)
+
+    if (view === 'login') {
+      setLoginForm({ email: '', password: '', rememberMe: false })
+    }
+
+    if (view === 'register') {
+      setRegisterForm({ fullName: '', email: '', password: '', confirmPassword: '' })
+    }
+
+    if (view === 'resetRequest') {
+      setResetRequestForm({ email: '' })
+    }
+
+    if (view === 'resetVerify') {
+      setResetVerifyForm({ email: resetRequestForm.email, token: '', password: '', confirmPassword: '' })
+    }
+  }
+
+  const saveSession = (auth: AuthResponse) => {
+    localStorage.setItem('orbitdesk_token', auth.token)
+    localStorage.setItem('orbitdesk_user', JSON.stringify({ name: auth.name, email: auth.email, role: auth.role }))
+    setAuthToken(auth.token)
+    setIsAuthenticated(true)
+    setCurrentUser(auth)
+  }
+
+  const clearSession = () => {
+    localStorage.removeItem('orbitdesk_token')
+    localStorage.removeItem('orbitdesk_user')
+    setAuthToken(null)
+    setIsAuthenticated(false)
+    setCurrentUser(null)
+  }
+
+  const handleLogout = () => {
+    resetMessages()
+    clearSession()
+    setActiveTab('overview')
+  }
+
+  const getPasswordStrength = (value: string) => {
+    const tests = [/[A-Z]/, /[0-9]/, /[!@#$%^&*(),.?":{}|<>]/, /.{10,}/]
+    const passed = tests.filter((test) => test.test(value)).length
+    if (!value) return ''
+    if (passed <= 1) return 'Weak'
+    if (passed === 2) return 'Fair'
+    if (passed === 3) return 'Good'
+    return 'Strong'
+  }
+
+  const handleRegister = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    resetAuthMessages()
+
+    if (!registerForm.fullName || !registerForm.email || !registerForm.password || !registerForm.confirmPassword) {
+      setError('Please fill in all fields.')
+      return
+    }
+
+    if (registerForm.password !== registerForm.confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    const strength = getPasswordStrength(registerForm.password)
+    if (strength === 'Weak' || strength === 'Fair') {
+      setError('Choose a stronger password with uppercase letters, numbers, and symbols.')
+      return
+    }
+
+    try {
+      const auth = await registerUser({
+        name: registerForm.fullName,
+        email: registerForm.email,
+        password: registerForm.password,
+      })
+
+      saveSession(auth)
+      setSuccess('Registration successful. Welcome aboard.')
+      await refreshAll()
+      setActiveTab('overview')
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    resetAuthMessages()
+
+    if (!loginForm.email || !loginForm.password) {
+      setError('Email and password are required.')
+      return
+    }
+
+    try {
+      const auth = await loginUser({
+        email: loginForm.email,
+        password: loginForm.password,
+      })
+
+      saveSession(auth)
+      setSuccess('Login successful.')
+      await refreshAll()
+      setActiveTab('overview')
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  const handleResetRequest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    resetAuthMessages()
+
+    if (!resetRequestForm.email) {
+      setError('Enter your email address.')
+      return
+    }
+
+    try {
+      const response = await resetPasswordRequest({ email: resetRequestForm.email })
+      setSuccess(response.token ? `Password reset token: ${response.token}` : 'Password reset email sent. Check your inbox.')
+      switchAuthView('resetVerify')
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  const handleResetVerify = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    resetAuthMessages()
+
+    if (!resetVerifyForm.email || !resetVerifyForm.token || !resetVerifyForm.password || !resetVerifyForm.confirmPassword) {
+      setError('Complete all reset fields.')
+      return
+    }
+
+    if (resetVerifyForm.password !== resetVerifyForm.confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    if (getPasswordStrength(resetVerifyForm.password) === 'Weak' || getPasswordStrength(resetVerifyForm.password) === 'Fair') {
+      setError('Use a stronger password for security.')
+      return
+    }
+
+    try {
+      await verifyResetPassword({
+        email: resetVerifyForm.email,
+        token: resetVerifyForm.token,
+        password: resetVerifyForm.password,
+      })
+
+      setSuccess('Password reset successful. Please log in.')
+      setAuthView('login')
+    } catch (err) {
+      setError((err as Error).message)
+    }
   }
 
   const resetUserForm = () => {
@@ -467,8 +693,235 @@ function App() {
   const getOrganizationName = (id: number) => organizations.find((item) => item.id === id)?.name ?? `Org ${id}`
   const getWorkspaceName = (id: number) => workspaces.find((item) => item.id === id)?.name ?? `Workspace ${id}`
 
+  if (!isAuthenticated) {
+    return (
+      <main className="auth-shell">
+        <section className="auth-card">
+          <div className="auth-header">
+            <p className="eyebrow">OrbitDesk</p>
+            <h1>
+              {authView === 'login'
+                ? 'Welcome back'
+                : authView === 'register'
+                ? 'Create your account'
+                : authView === 'resetRequest'
+                ? 'Reset your password'
+                : 'Verify your reset'}
+            </h1>
+            <p className="intro">A modern workspace system for NGOs, teams, and enterprise projects.</p>
+          </div>
+
+          {error ? <div className="banner error">{error}</div> : null}
+          {success ? <div className="banner success">{success}</div> : null}
+
+          {authView === 'login' ? (
+            <form className="auth-form" onSubmit={handleLogin}>
+              <label>
+                Email address
+                <input
+                  type="email"
+                  value={loginForm.email}
+                  onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })}
+                  required
+                  aria-label="Email address"
+                />
+              </label>
+              <label>
+                Password
+                <input
+                  type="password"
+                  value={loginForm.password}
+                  onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
+                  required
+                  aria-label="Password"
+                />
+              </label>
+              <div className="auth-options">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={loginForm.rememberMe}
+                    onChange={(event) => setLoginForm({ ...loginForm, rememberMe: event.target.checked })}
+                  />
+                  Remember me
+                </label>
+                <button type="button" className="auth-link" onClick={() => switchAuthView('resetRequest')}>
+                  Forgot password?
+                </button>
+              </div>
+              <button type="submit" className="primary-button auth-primary">
+                Login
+              </button>
+              <div className="auth-divider"><span>or continue with</span></div>
+              <div className="social-buttons">
+                <button type="button" className="social-button google">Continue with Google</button>
+                <button type="button" className="social-button github">Continue with GitHub</button>
+              </div>
+              <div className="auth-footer">
+                New here? <button type="button" className="auth-link" onClick={() => switchAuthView('register')}>Register</button>
+              </div>
+            </form>
+          ) : authView === 'register' ? (
+            <form className="auth-form" onSubmit={handleRegister}>
+              <label>
+                Full name
+                <input
+                  type="text"
+                  value={registerForm.fullName}
+                  onChange={(event) => setRegisterForm({ ...registerForm, fullName: event.target.value })}
+                  required
+                  aria-label="Full name"
+                />
+              </label>
+              <label>
+                Email address
+                <input
+                  type="email"
+                  value={registerForm.email}
+                  onChange={(event) => setRegisterForm({ ...registerForm, email: event.target.value })}
+                  required
+                  aria-label="Email address"
+                />
+              </label>
+              <label>
+                Password
+                <input
+                  type="password"
+                  value={registerForm.password}
+                  onChange={(event) => {
+                    setRegisterForm({ ...registerForm, password: event.target.value })
+                    setPasswordStrength(getPasswordStrength(event.target.value))
+                  }}
+                  required
+                  aria-label="Password"
+                />
+              </label>
+              <div className="password-strength">Strength: {passwordStrength || 'Enter a password'}</div>
+              <label>
+                Confirm password
+                <input
+                  type="password"
+                  value={registerForm.confirmPassword}
+                  onChange={(event) => setRegisterForm({ ...registerForm, confirmPassword: event.target.value })}
+                  required
+                  aria-label="Confirm password"
+                />
+              </label>
+              <button type="submit" className="primary-button auth-primary">
+                Register
+              </button>
+              <div className="auth-divider"><span>or continue with</span></div>
+              <div className="social-buttons">
+                <button type="button" className="social-button google">Continue with Google</button>
+                <button type="button" className="social-button github">Continue with GitHub</button>
+              </div>
+              <div className="auth-footer">
+                Already have an account? <button type="button" className="auth-link" onClick={() => switchAuthView('login')}>Login</button>
+              </div>
+            </form>
+          ) : authView === 'resetRequest' ? (
+            <form className="auth-form" onSubmit={handleResetRequest}>
+              <label>
+                Email address
+                <input
+                  type="email"
+                  value={resetRequestForm.email}
+                  onChange={(event) => setResetRequestForm({ ...resetRequestForm, email: event.target.value })}
+                  required
+                  aria-label="Email address"
+                />
+              </label>
+              <button type="submit" className="primary-button auth-primary">
+                Send reset link
+              </button>
+              <div className="auth-divider"><span>or</span></div>
+              <div className="auth-footer">
+                Remembered your password? <button type="button" className="auth-link" onClick={() => switchAuthView('login')}>Login</button>
+              </div>
+            </form>
+          ) : (
+            <form className="auth-form" onSubmit={handleResetVerify}>
+              <label>
+                Email address
+                <input
+                  type="email"
+                  value={resetVerifyForm.email}
+                  onChange={(event) => setResetVerifyForm({ ...resetVerifyForm, email: event.target.value })}
+                  required
+                  aria-label="Email address"
+                />
+              </label>
+              <label>
+                Verification code
+                <input
+                  type="text"
+                  value={resetVerifyForm.token}
+                  onChange={(event) => setResetVerifyForm({ ...resetVerifyForm, token: event.target.value })}
+                  required
+                  aria-label="Verification code"
+                />
+              </label>
+              <label>
+                New password
+                <input
+                  type="password"
+                  value={resetVerifyForm.password}
+                  onChange={(event) => {
+                    setResetVerifyForm({ ...resetVerifyForm, password: event.target.value })
+                    setPasswordStrength(getPasswordStrength(event.target.value))
+                  }}
+                  required
+                  aria-label="New password"
+                />
+              </label>
+              <div className="password-strength">Strength: {passwordStrength || 'Enter a password'}</div>
+              <label>
+                Confirm new password
+                <input
+                  type="password"
+                  value={resetVerifyForm.confirmPassword}
+                  onChange={(event) => setResetVerifyForm({ ...resetVerifyForm, confirmPassword: event.target.value })}
+                  required
+                  aria-label="Confirm new password"
+                />
+              </label>
+              <button type="submit" className="primary-button auth-primary">
+                Reset password
+              </button>
+              <div className="auth-divider"><span>or</span></div>
+              <div className="auth-footer">
+                Back to <button type="button" className="auth-link" onClick={() => switchAuthView('login')}>Login</button>
+              </div>
+            </form>
+          )}
+        </section>
+      </main>
+    )
+  }
+
   return (
-    <main className="app-shell">
+    <div className="layout">
+      <aside className={sidebarCollapsed ? 'sidebar collapsed' : 'sidebar'}>
+        <div className="brand">OrbitDesk</div>
+        <button type="button" className="sidebar-toggle" onClick={toggleSidebar} aria-label="Toggle sidebar">
+          {sidebarCollapsed ? '»' : '«'}
+        </button>
+        <nav role="navigation" aria-label="Main features">
+          {(['overview', 'users', 'organizations', 'workspaces', 'projects', 'organizationMembers', 'workspaceMembers'] as Tab[]).map((tab) => (
+            <button key={tab} type="button" className={`nav-item ${tab === activeTab ? 'active' : ''}`} onClick={() => { resetMessages(); setActiveTab(tab) }}>
+              {tab === 'overview'
+                ? 'Overview'
+                : tab === 'organizationMembers'
+                ? 'Org members'
+                : tab === 'workspaceMembers'
+                ? 'Workspace members'
+                : tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      <main className="content app-shell">
       <header className="app-header">
         <div>
           <p className="eyebrow">OrbitDesk</p>
@@ -476,6 +929,16 @@ function App() {
           <p className="intro">
             Manage users, organizations, hierarchy, members, and projects from a single product interface.
           </p>
+        </div>
+        <div className="header-actions">
+          {currentUser ? (
+            <>
+              <span className="user-pill">{currentUser.name}</span>
+              <button type="button" className="secondary-button" onClick={handleLogout}>
+                Logout
+              </button>
+            </>
+          ) : null}
         </div>
         <nav className="tabs" aria-label="Primary navigation">
           {(['overview', 'users', 'organizations', 'workspaces', 'projects', 'organizationMembers', 'workspaceMembers'] as Tab[]).map((tab) => (
@@ -1009,7 +1472,8 @@ function App() {
           </section>
         </section>
       )}
-    </main>
+      </main>
+    </div>
   )
 }
 

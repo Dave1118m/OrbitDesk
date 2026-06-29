@@ -1,11 +1,25 @@
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5000/api'
+let authToken: string | null = null
+
+export function setAuthToken(token: string | null) {
+  authToken = token
+}
+
+function buildHeaders(init?: RequestInit) {
+  const headers = new Headers(init?.headers)
+  headers.set('Content-Type', 'application/json')
+
+  if (authToken) {
+    headers.set('Authorization', `Bearer ${authToken}`)
+  }
+
+  return headers
+}
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-    },
     ...init,
+    headers: buildHeaders(init),
   })
 
   if (!response.ok) {
@@ -18,10 +32,8 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 async function fetchNoContent(path: string, init?: RequestInit) {
   const response = await fetch(`${apiBase}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-    },
     ...init,
+    headers: buildHeaders(init),
   })
 
   if (!response.ok) {
@@ -136,6 +148,39 @@ type CreateWorkspaceMemberRequest = {
   role: string
 }
 
+type LoginRequest = {
+  email: string
+  password: string
+}
+
+type RegisterRequest = {
+  name: string
+  email: string
+  password: string
+}
+
+type ResetRequest = {
+  email: string
+}
+
+type VerifyResetRequest = {
+  email: string
+  token: string
+  password: string
+}
+
+type AuthResponse = {
+  token: string
+  name: string
+  email: string
+  role: string
+}
+
+type MessageResponse = {
+  message: string
+  token?: string
+}
+
 type RemoveOrganizationMemberRequest = {
   organizationId: number
   userId: number
@@ -165,6 +210,12 @@ export type {
   CreateWorkspaceMemberRequest,
   RemoveOrganizationMemberRequest,
   RemoveWorkspaceMemberRequest,
+  LoginRequest,
+  RegisterRequest,
+  ResetRequest,
+  VerifyResetRequest,
+  AuthResponse,
+  MessageResponse,
 }
 
 export function getUsers() {
@@ -253,6 +304,34 @@ export function createProject(request: CreateProjectRequest) {
 export function updateProject(id: number, request: UpdateProjectRequest) {
   return fetchJson<Project>(`/Project/${id}`, {
     method: 'PUT',
+    body: JSON.stringify(request),
+  })
+}
+
+export function loginUser(request: LoginRequest) {
+  return fetchJson<AuthResponse>('/Auth/login', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+}
+
+export function registerUser(request: RegisterRequest) {
+  return fetchJson<AuthResponse>('/Auth/register', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+}
+
+export function resetPasswordRequest(request: ResetRequest) {
+  return fetchJson<MessageResponse>('/Auth/reset-request', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+}
+
+export function verifyResetPassword(request: VerifyResetRequest) {
+  return fetchJson<MessageResponse>('/Auth/reset-verify', {
+    method: 'POST',
     body: JSON.stringify(request),
   })
 }

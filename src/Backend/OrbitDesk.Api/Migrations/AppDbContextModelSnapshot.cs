@@ -7,7 +7,6 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OrbitDesk.Api.Data;
 
 #nullable disable
-
 namespace OrbitDesk.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
